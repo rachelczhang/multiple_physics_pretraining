@@ -2,7 +2,6 @@ import os
 import torch
 import torch.nn as nn
 import pickle
-import h5py
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np 
 import matplotlib.pyplot as plt
@@ -15,7 +14,7 @@ from utils.YParams import YParams
 
 wandb.init(project="sparse-autoencoder", entity="rczhang")
 
-def load_model_and_params():
+def load_model_and_params(device):
     # Load model parameters
     params = YParams(os.path.abspath("./config.yaml"), "basic_config", True)
 
@@ -25,15 +24,17 @@ def load_model_and_params():
     model = build_avit(params)
 
     # Load the pretrained checkpoint
-    checkpoint = torch.load('./MPP_AViT_Ti', map_location=torch.device('cpu'))
+    checkpoint = torch.load('./MPP_AViT_Ti', map_location=device,  weights_only=True)
 
     model.load_state_dict(checkpoint)
+    model.to(device)
     model.eval()
 
     # # **Print the Layers**
     # print("Model modules:")
     # for name, module in model.named_modules():
     #     print(name, '->', type(module))
+    #     print(module)
 
     return model, params
 
@@ -42,11 +43,10 @@ def collect_activations_batched(model, data_loader, max_batches=None):
     
     def hook_fn(module, input, output):
         print('raw output shape', output.shape)
-        # detach and move to CPU to avoid memory issues
-        activations.append(output.detach().cpu())
+        activations.append(output.clone().detach().cpu())
     
     # register hook on the spatial attention layer
-    spatial_attention_layer = model.blocks[8].spatial.mlp.fc1
+    spatial_attention_layer = model.blocks[10].spatial.mlp.fc2
     hook = spatial_attention_layer.register_forward_hook(hook_fn)
     
     print("Starting activation collection...")
@@ -90,9 +90,18 @@ def collect_activations_batched(model, data_loader, max_batches=None):
                 
             # unpack the batch
             inp, file_index, field_labels, bcs, _ = data
+            inp = inp.to(device)
+            field_labels = field_labels.to(device)
+            bcs = bcs.to(device)
             
             # Run the batch through the model
             output = model(inp, field_labels, bcs)
+            torch.cuda.empty_cache()
+
+            inp = inp.cpu()
+            field_labels = field_labels.cpu()
+            bcs = bcs.cpu()
+
             print(f"Processed batch {batch_idx + 1}, input shape: {inp.shape}, output shape: {output.shape}")
     
     # Remove the hook
@@ -108,7 +117,7 @@ def collect_activations_batched(model, data_loader, max_batches=None):
     
     return activations_tensor_flat
 
-def create_new_activations(filename, max_batches=None):
+def create_new_activations(filename, device, max_batches=None):
     """
     Create new activations by loading the model and processing the data.
     
@@ -119,7 +128,7 @@ def create_new_activations(filename, max_batches=None):
         torch.Tensor: Flattened activations tensor
     """
     # load model and params
-    model, params = load_model_and_params()
+    model, params = load_model_and_params(device)
     print('loaded model and params')
 
     # load data
@@ -137,7 +146,7 @@ def create_new_activations(filename, max_batches=None):
     torch.save(activations_tensor_flat, filename)
     return activations_tensor_flat
 
-def load_or_create_activations(filename, max_batches=None):
+def load_or_create_activations(filename, device, max_batches=None):
     """
     Load activations from a .pt file if it exists, otherwise create new ones.
     
@@ -149,17 +158,17 @@ def load_or_create_activations(filename, max_batches=None):
     """
     if os.path.exists(filename):
         print(f"loading existing activations from {filename}")
-        activations_tensor_flat = torch.load(filename)
+        activations_tensor_flat = torch.load(filename, weights_only=True)
         print(f"loaded activations shape: {activations_tensor_flat.shape}")
         return activations_tensor_flat
     else:
         print(f"{filename} does not exist, recreating activations")
-        return create_new_activations(filename, max_batches=max_batches)
+        return create_new_activations(filename, device, max_batches=max_batches)
 
-def train_sae(activations, autoencoder):
+def train_sae(activations, autoencoder, device):
     # **Create Dataset and Dataloader**
     dataset = TensorDataset(activations)
-    dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=256, shuffle=True)
 
     print(f"Dataset size: {len(dataset)}")
 
@@ -187,7 +196,7 @@ def train_sae(activations, autoencoder):
     # **Loss Function and Optimizer**
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(autoencoder.parameters(), lr=1e-4)
-    sparsity_lambda = 1e-2  
+    sparsity_lambda = 1e-4
     patience = 300
     best_loss = float('inf')
     epochs_without_improvement = 0
@@ -197,7 +206,7 @@ def train_sae(activations, autoencoder):
     for epoch in range(num_epochs):
         total_loss = 0
         for batch in dataloader:
-            batch = batch[0] 
+            batch = batch[0].to(device)
 
             # Forward pass
             reconstructed, encoded = autoencoder(batch)
@@ -235,19 +244,21 @@ def train_sae(activations, autoencoder):
             break
 
 if __name__ == '__main__':
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Running on device: {device}")
     filename = "activations.pt"
 
     # Load or create activations
-    activations_tensor_flat = load_or_create_activations(filename, max_batches=500)
+    activations_tensor_flat = load_or_create_activations(filename, device, max_batches=500)
     print("Final activations shape:", activations_tensor_flat.shape)
 
     # Define the SAE
     input_size = activations_tensor_flat.shape[1]
-    hidden_size = input_size * 2 
-    autoencoder = SparseAutoencoder(input_size, hidden_size)
+    hidden_size = int(input_size * 1.2)
+    autoencoder = SparseAutoencoder(input_size, hidden_size).to(device)
     print(f"Initialized Sparse Autoencoder with input size: {input_size}, hidden size: {hidden_size}")
 
     # Train the SAE
-    train_sae(activations_tensor_flat, autoencoder)
+    train_sae(activations_tensor_flat, autoencoder, device)
 
     wandb.finish()
