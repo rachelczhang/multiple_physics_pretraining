@@ -1,5 +1,5 @@
 # MPP
-Repository for experiment code for our paper [Multiple Physics Pretraining (MPP)](https://openreview.net/forum?id=DKSI3bULiZ). 
+Repository for experiment code for our paper [Multiple Physics Pretraining (MPP)](https://arxiv.org/abs/2310.02994). 
 
 Multiple Physics Pretraining (MPP) is a pretraining strategy in which multiple sets of dynamics are jointly normalized and embedded into a single
 space for prediction. 
@@ -143,18 +143,4 @@ methods. Examples can be found in data_utils.hdf5_datasets.py
 5. Add any dataset names you have defined to "append_datasets" in the config file.
 6. Run train_basic.py using the config namespace "finetune". 
 
-## Citing
-
-If our work or this repo was useful to your work, please cite our paper at:
-
-```quote
-@inproceedings{
-  mccabe2024multiple,
-  title={Multiple Physics Pretraining for Spatiotemporal Surrogate Models},
-  author={Michael McCabe and Bruno R{\'e}galdo-Saint Blancard and Liam Holden Parker and Ruben Ohana and Miles Cranmer and Alberto Bietti and Michael Eickenberg and Siavash Golkar and Geraud Krawezik and Francois Lanusse and Mariel Pettee and Tiberiu Tesileanu and Kyunghyun Cho and Shirley Ho},
-  booktitle={The Thirty-eighth Annual Conference on Neural Information Processing Systems},
-  year={2024},
-  url={https://openreview.net/forum?id=DKSI3bULiZ}
-}
-```
 

@@ -80,6 +80,7 @@ class BaseHDF5DirectoryDataset(Dataset):
         else:
             sub_dsets = []
             for file in self.files_paths:
+                print ("HELLO", self.path)
                 subd = self.__class__(self.path, file, n_steps=self.n_steps, dt=self.dt, split=self.split,
                                train_val_test=self.train_val_test, subname=self.subname,
                                  extra_specific=True)
@@ -96,6 +97,7 @@ class BaseHDF5DirectoryDataset(Dataset):
         raise NotImplementedError # Per dset - should be (x=(-history:local_idx+dt) so that get_item can split into x, y
 
     def _get_directory_stats(self, path):
+        print ("Get directory", path)
         self.files_paths = glob.glob(path + "/*.h5") + glob.glob(path + "/*.hdf5")
         self.files_paths.sort()
         self.n_files = len(self.files_paths)

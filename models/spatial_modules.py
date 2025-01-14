@@ -61,6 +61,8 @@ class SubsampledLinear(nn.Module):
     def forward(self, x, labels):
         # Note - really only works if all batches are the same input type
         labels = labels[0] # Figure out how to handle this for normal batches later
+
+        # print ("HELLO FORWARD", labels)
         label_size = len(labels)
         if self.subsample_in:
             scale = (self.dim_in / label_size)**.5 # Equivalent to swapping init to correct for given subsample of input

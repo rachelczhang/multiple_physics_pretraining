@@ -30,6 +30,9 @@ def get_data_loader(params, paths, distributed, split='train', rank=0, train_off
     dataset = MixedDataset(paths, n_steps=params.n_steps, train_val_test=params.train_val_test, split=split,
                             tie_fields=params.tie_fields, use_all_fields=params.use_all_fields, enforce_max_steps=params.enforce_max_steps, 
                             train_offset=train_offset)
+    # dataset = MixedDataset(paths, n_steps=params.n_steps, train_val_test=params.train_val_test, split=split,
+    #                    tie_fields=params.tie_fields, use_all_fields=params.use_all_fields, enforce_max_steps=params.enforce_max_steps, 
+    #                    train_offset=train_offset, selected_trajectories=params.selected_trajectories)
     # dataset = IncompNSDataset(paths[0], n_steps=params.n_steps, train_val_test=params.train_val_test, split=split)
     seed = torch.random.seed() if 'train'==split else 0
     if distributed:
@@ -65,10 +68,17 @@ class MixedDataset(Dataset):
         self.offsets = [0]
         self.train_val_test = train_val_test
         self.use_all_fields = use_all_fields
+        # self.selected_trajectories = selected_trajectories  # Store the selected trajectories
 
         for dset, path, include_string in zip(self.type_list, self.path_list, self.include_string):
+            print ("Ping", dset, path)
             subdset = DSET_NAME_TO_OBJECT[dset](path, include_string, n_steps=n_steps,
                                                  dt=dt, train_val_test=train_val_test, split=split)
+            
+            print (subdset)
+            # # **Filter subdset to only include selected trajectories if specified**
+            # if self.selected_trajectories:
+            #     subdset.data = [data for data in subdset.data if data.id in self.selected_trajectories]
             # Check to make sure our dataset actually exists with these settings
             try:
                 len(subdset)
